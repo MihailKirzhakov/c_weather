@@ -7,19 +7,19 @@ typedef enum {
     HTTP_ERR_NOMEM,
     HTTP_ERR_NETWORK,
     HTTP_ERR_STATUS
-} HttpResult;
+} http_result_t;
 
 typedef struct {
     char *body;
     long status;
     char error[256];
-} HttpResponse;
+} http_response_t;
 
-HttpResult http_fetch_weather(const char *city, HttpResponse *resp);
+http_result_t http_fetch_weather(const char *city, http_response_t *resp);
 
-void http_response_free(HttpResponse *resp);
+void http_response_free(http_response_t *resp);
 
-HttpResult http_global_init(void);
+http_result_t http_global_init(void);
 void http_global_cleanup(void);
 
 #endif

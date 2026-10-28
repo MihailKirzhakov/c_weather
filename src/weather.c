@@ -43,13 +43,13 @@ static void copy_string(char *dst, size_t dst_size, const char *src)
     snprintf(dst, dst_size, "%s", src != NULL ? src : "");
 }
 
-static WeatherResult fail(char *err, size_t err_size, const char *what)
+static weather_result_t fail(char *err, size_t err_size, const char *what)
 {
     snprintf(err, err_size, "missing or invalid field: %s", what);
     return WEATHER_ERR_FORMAT;
 }
 
-WeatherResult weather_parse(const char *json, Weather *out, char *err, size_t err_size)
+weather_result_t weather_parse(const char *json, weather_t *out, char *err, size_t err_size)
 {
     cJSON *root = cJSON_Parse(json);
     if (root == NULL) {
@@ -57,7 +57,7 @@ WeatherResult weather_parse(const char *json, Weather *out, char *err, size_t er
         return WEATHER_ERR_NOT_JSON;
     }
 
-    WeatherResult result = WEATHER_OK;
+    weather_result_t result = WEATHER_OK;
     const cJSON *cur = array_item(root, "current_condition", 0);
     const cJSON *day = array_item(root, "weather", 0);
 
@@ -92,7 +92,7 @@ WeatherResult weather_parse(const char *json, Weather *out, char *err, size_t er
     return result;
 }
 
-void weather_print(const Weather *w, const char *city)
+void weather_print(const weather_t *w, const char *city)
 {
     printf("Погода для города    | %s\n", city);
     printf("-----------------------------------------\n");

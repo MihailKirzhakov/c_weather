@@ -1,4 +1,5 @@
 #include "http.h"
+#include "util.h"
 
 #include <curl/curl.h>
 #include <stdint.h>
@@ -15,11 +16,11 @@
 typedef struct {
     char *data;
     size_t size;
-} Memory;
+} memory_t;
 
 static size_t write_cb(void *chunk, size_t size, size_t nmemb, void *userp)
 {
-    Memory *mem = userp;
+    memory_t *mem = userp;
 
     if (nmemb != 0 && size > SIZE_MAX / nmemb) {
         return 0;
@@ -40,9 +41,9 @@ static size_t write_cb(void *chunk, size_t size, size_t nmemb, void *userp)
     return realsize;
 }
 
-static void set_error(HttpResponse *resp, const char *fmt, const char *arg)
+static void set_error(http_response_t *resp, const char *msg)
 {
-    snprintf(resp->error, sizeof resp->error, fmt, arg);
+    snprintf(resp->error, sizeof resp->error, "%s", msg);
 }
 
 static char *build_url(CURL *curl, const char *city)
@@ -61,7 +62,7 @@ static char *build_url(CURL *curl, const char *city)
     return url;
 }
 
-HttpResult http_global_init(void)
+http_result_t http_global_init(void)
 {
     return curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK ? HTTP_OK : HTTP_ERR_INIT;
 }
@@ -71,35 +72,39 @@ void http_global_cleanup(void)
     curl_global_cleanup();
 }
 
-void http_response_free(HttpResponse *resp)
+void http_response_free(http_response_t *resp)
 {
-    free(resp->body);
-    resp->body = NULL;
+    SAFE_FREE(resp->body);
     resp->status = 0;
     resp->error[0] = '\0';
 }
 
-HttpResult http_fetch_weather(const char *city, HttpResponse *resp)
+http_result_t http_fetch_weather(const char *city, http_response_t *resp)
 {
+    http_result_t result = HTTP_OK;
+    CURL *curl = NULL;
+    char *url = NULL;
+    memory_t mem = { NULL, 0 };
+    char errbuf[CURL_ERROR_SIZE] = "";
+    CURLcode rc;
+
     resp->body = NULL;
     resp->status = 0;
     resp->error[0] = '\0';
 
-    CURL *curl = curl_easy_init();
+    curl = curl_easy_init();
     if (curl == NULL) {
-        set_error(resp, "%s", "cannot initialise libcurl handle");
-        return HTTP_ERR_INIT;
+        set_error(resp, "cannot initialise libcurl handle");
+        result = HTTP_ERR_INIT;
+        goto cleanup;
     }
 
-    char *url = build_url(curl, city);
+    url = build_url(curl, city);
     if (url == NULL) {
-        curl_easy_cleanup(curl);
-        set_error(resp, "%s", "out of memory");
-        return HTTP_ERR_NOMEM;
+        set_error(resp, "out of memory");
+        result = HTTP_ERR_NOMEM;
+        goto cleanup;
     }
-
-    Memory mem = { NULL, 0 };
-    char errbuf[CURL_ERROR_SIZE] = "";
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
@@ -110,30 +115,34 @@ HttpResult http_fetch_weather(const char *city, HttpResponse *resp)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, TOTAL_TIMEOUT_SEC);
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
 
-    HttpResult result = HTTP_OK;
-    CURLcode rc = curl_easy_perform(curl);
-
+    rc = curl_easy_perform(curl);
     if (rc == CURLE_WRITE_ERROR && mem.data == NULL) {
-        set_error(resp, "%s", "out of memory");
+        set_error(resp, "out of memory");
         result = HTTP_ERR_NOMEM;
-    } else if (rc != CURLE_OK) {
-        set_error(resp, "%s", errbuf[0] != '\0' ? errbuf : curl_easy_strerror(rc));
+        goto cleanup;
+    }
+    if (rc != CURLE_OK) {
+        set_error(resp, errbuf[0] != '\0' ? errbuf : curl_easy_strerror(rc));
         result = HTTP_ERR_NETWORK;
-    } else {
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &resp->status);
-        if (resp->status != 200) {
-            snprintf(resp->error, sizeof resp->error, "server returned HTTP %ld", resp->status);
-            result = HTTP_ERR_STATUS;
-        }
+        goto cleanup;
     }
 
-    if (result == HTTP_OK || result == HTTP_ERR_STATUS) {
-        resp->body = mem.data;
-    } else {
-        free(mem.data);
+    /* Hand the buffer over to the caller; it is kept even for non-200 so the
+     * body can be inspected. */
+    resp->body = mem.data;
+    mem.data = NULL;
+
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &resp->status);
+    if (resp->status != 200) {
+        snprintf(resp->error, sizeof resp->error, "server returned HTTP %ld", resp->status);
+        result = HTTP_ERR_STATUS;
     }
 
-    free(url);
-    curl_easy_cleanup(curl);
+cleanup:
+    SAFE_FREE(mem.data);
+    SAFE_FREE(url);
+    if (curl != NULL) {
+        curl_easy_cleanup(curl);
+    }
     return result;
 }

@@ -12,7 +12,7 @@ enum {
     EXIT_BAD_RESPONSE = 5
 };
 
-static int is_unknown_location(const HttpResponse *resp)
+static int is_unknown_location(const http_response_t *resp)
 {
     if (resp->status == 404) {
         return 1;
@@ -24,8 +24,8 @@ static int is_unknown_location(const HttpResponse *resp)
 
 static int run(const char *city)
 {
-    HttpResponse resp;
-    HttpResult hr = http_fetch_weather(city, &resp);
+    http_response_t resp;
+    http_result_t hr = http_fetch_weather(city, &resp);
     int code = EXIT_SUCCESS;
 
     if (hr == HTTP_ERR_NOMEM) {
@@ -41,9 +41,9 @@ static int run(const char *city)
         fprintf(stderr, "Location \"%s\" not found\n", city);
         code = EXIT_UNKNOWN_CITY;
     } else {
-        Weather w;
+        weather_t w;
         char err[128];
-        WeatherResult wr = weather_parse(resp.body, &w, err, sizeof err);
+        weather_result_t wr = weather_parse(resp.body, &w, err, sizeof err);
 
         if (wr == WEATHER_ERR_NOT_JSON) {
             fprintf(stderr, "Location \"%s\" not found\n", city);

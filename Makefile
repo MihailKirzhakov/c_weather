@@ -9,7 +9,7 @@ OBJ = $(SRC:.c=.o)
 weather: $(OBJ)
 	$(CC) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
 
-src/%.o: src/%.c src/http.h src/weather.h
+src/%.o: src/%.c src/http.h src/weather.h src/util.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
